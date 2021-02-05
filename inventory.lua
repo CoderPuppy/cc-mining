@@ -44,9 +44,7 @@ local state
 local locked
 
 -- the transaction log records virtual updates which are not saved to disk otherwise
--- TODO: in flight records physical updates which are in progress
-
--- TODO: track numbers of slots and total number of items
+-- in flight records slots which may be different from the virtual records
 
 local function item_type_key(stack)
 	return string.format('%q%q', stack.name, stack.nbt)
@@ -157,6 +155,7 @@ local function fs_paths(dir)
 		save_new = fs.combine(dir, 'save-new');
 		save = fs.combine(dir, 'save');
 		transaction_log = fs.combine(dir, 'transaction-log');
+		in_flight = fs.combine(dir, 'in-flight');
 	}
 end
 
@@ -281,7 +280,53 @@ local function initialize(dir)
 		state.transaction_log.flush()
 	end
 
-	-- TODO: in flight
+	local h = fs.open(paths.in_flight, 'r')
+	if h then
+		local in_flight = textutils.unserialize(h.readAll())
+		h.close()
+
+		local item_type = state.item_types[in_flight.item_type_key]
+		local chest = state.chests[in_flight.chest_name]
+		local slot = in_flight.slot
+		local expected = item_type.chests[chest][slot]
+		local actual = peripheral.call(chest.name, 'getItemDetail', slot).count
+		if actual < expected then
+			local n = expected - actual
+			track_extract(chest, slot, item_type, n)
+			state.transaction_log.write(string.format(
+				'{'
+					.. ' type = "extract";'
+					.. ' chest_name = %q;'
+					.. ' slot = %d;'
+					.. ' item_type_key = %q;'
+					.. ' num = %d;'
+				.. '}\n',
+				chest.name, slot, item_type.key, n
+			))
+			state.transaction_log.flush()
+		elseif stack.count > chest_slots[slot] then
+			local n = actual - expected
+			-- saying it is not full should always be safe
+			-- the only case in which it would break things is if another slot is partial
+			-- but that shouldn't happen
+			local full = false
+			track_insert(chest, slot, item_type, n, full)
+			state.transaction_log.write(string.format(
+				'{'
+					.. ' type = "insert";'
+					.. ' chest_name = %q;'
+					.. ' slot = %d;'
+					.. ' item_type_key = %q;'
+					.. ' num = %d;'
+					.. ' full = %s;'
+				.. '}\n',
+				dst_chest.name, dst_slot, item_type.key, n, full
+			))
+			state.transaction_log.flush()
+		end
+
+		f.delete(paths.in_flight)
+	end
 
 	release()
 	
@@ -424,7 +469,7 @@ local function add_chest(name)
 		if rec then
 			local item_type, number = rec[1], rec[2]
 			local full = partials[item_type] ~= slot
-			track_insert(chest, slot, item_type, number)
+			track_insert(chest, slot, item_type, number, full)
 			trans_str = string.format(
 				'%s{'
 					.. ' type = "insert";'
@@ -478,8 +523,15 @@ local function insert(inv, slot, amt, detail)
 			end
 			assert(dst_chest, 'TODO: no room in system')
 		end
-		-- TODO: in flight
+		assert(not fs.exists(state.paths.in_flight))
+		local h = fs.open(state.paths.in_flight, 'w')
+		h.write(string.format(
+			'{ item_type_key = %q; chest_name = %q; slot = %d; }',
+			item_type.key, dst_chest.name, dst_slot
+		))
+		h.close()
 		local n = inv.pushItems(dst_chest.name, slot, remaining, dst_slot)
+		fs.delete(state.paths.in_flight)
 		local full = n < remaining
 		track_insert(dst_chest, dst_slot, item_type, n, full)
 		state.transaction_log.write(string.format(
@@ -508,8 +560,15 @@ local function extract(item_type, inv, dst_slot, amt)
 	local function extract_part(chest, slot)
 		local slot_num = item_type.chests[chest][slot]
 		local pull = slot_num < remaining and slot_num or remaining
-		-- TODO: in flight
+		assert(not fs.exists(state.paths.in_flight))
+		local h = fs.open(state.paths.in_flight, 'w')
+		h.write(string.format(
+			'{ item_type_key = %q; chest_name = %q; slot = %d; }',
+			item_type.key, dst_chest.name, dst_slot
+		))
+		h.close()
 		local n = inv.pullItems(chest.name, slot, pull, dst_slot)
+		fs.delete(state.paths.in_flight)
 		remaining = remaining - n
 		transferred = transferred + n
 		track_extract(chest, slot, item_type, n)

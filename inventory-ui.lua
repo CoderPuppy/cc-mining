@@ -330,7 +330,6 @@ return function(I, ext_chest)
 					end
 				end
 			elseif list_model == inv_list_model then
-				I.log('keys down: ' .. textutils.serialize(keys_down))
 				local item_type = list_model.list[list_model.selected_i]
 				if not item_type then
 					-- skip
