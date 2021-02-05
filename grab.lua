@@ -1,6 +1,6 @@
 local inv = false
 local function grab(file)
-	file.delete(file)
+	fs.delete(file)
 	shell.run(('wget https://raw.githubusercontent.com/CoderPuppy/cc-mining/master/%s %s'):format(file, file))
 end
 if inv then
