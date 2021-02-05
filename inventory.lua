@@ -41,11 +41,6 @@ local log; do
 end
 
 local state
-local save_id
-local item_types
-local chests
-local chest_room
-local transaction_log
 local locked
 
 -- the transaction log records virtual updates which are not saved to disk otherwise
@@ -93,6 +88,7 @@ local function track_insert(chest, slot, item_type, num, full)
 	item_type.partials[chest] = not full and slot or nil
 	if chest.empties[slot] then
 		chest.empties[slot] = nil
+		state.num_slots_free = state.num_slots_free - 1
 		if not next(chest.empties) then
 			state.chest_room[chest] = nil
 		end
@@ -105,12 +101,14 @@ local function track_insert(chest, slot, item_type, num, full)
 	end
 	chest_stacks[slot] = (chest_stacks[slot] or 0) + num
 	item_type.number = item_type.number + num
+	state.total_number = state.total_number + num
 end
 local function track_extract(chest, slot, item_type, num)
 	local chest_slots = item_type.chests[chest]
 	local slot_num = chest_slots[slot]
 	chest_slots[slot] = slot_num - num
 	item_type.number = item_type.number - num
+	state.total_number = state.total_number - num
 	if num >= slot_num then
 		assert(num == slot_num)
 		assert(item_type.partials[chest] == slot)
@@ -121,6 +119,7 @@ local function track_extract(chest, slot, item_type, num)
 			chest.item_types[item_type] = nil
 		end
 		chest.empties[slot] = true
+		state.num_slots_free = state.num_slots_free + 1
 		state.chest_room[chest] = true
 	else
 		item_type.partials[chest] = slot
@@ -156,6 +155,9 @@ local function initialize()
 		h.close()
 		state = {
 			save_id = save.id;
+			total_number = save.total_number;
+			num_slots = save.num_slots;
+			num_slots_free = save.num_slots_free;
 			item_types = {};
 			chests = {};
 			chest_room = {};
@@ -198,6 +200,9 @@ local function initialize()
 	else
 		state = {
 			save_id = -1;
+			total_number = 0;
+			num_slots = 0;
+			num_slots_free = 0;
 			item_types = {};
 			chests = {};
 			chest_room = {};
@@ -227,6 +232,8 @@ local function initialize()
 				for i = 1, chest.num_slots do
 					chest.empties[i] = true
 				end
+				state.num_slots = state.num_slots + chest.num_slots
+				state.num_slots_free = state.num_slots_free + chest.num_slots
 				chest_room[chest] = true
 			elseif entry.type == 'add_item_type' then
 				track_add_item_type(entry.item_type_key, entry.detail)
@@ -269,7 +276,10 @@ local function save()
 	state.transaction_log.close()
 
 	local save = {
-		id = save_id + 1;
+		id = state.save_id + 1;
+		total_number = state.total_number;
+		num_slots = state.num_slots;
+		num_slots_free = state.num_slots_free;
 		item_types = {};
 		chests = {};
 		chest_room = {};
@@ -373,24 +383,20 @@ local function add_chest(name)
 		item_types = {};
 	}
 	assert(not state.chests[chest.name], 'chest already registered')
-	state.chests[chest.name] = chest
 	local contents = inv.list()
-	local has_room = false
 	for i = 1, chest.num_slots do
-		if contents[i] then
-			error 'TODO'
-			-- it can't just index it, because there are rules (specifically about only one partial per item type and chest)
-			-- maybe just return nil, saying we can't add this chest
-			-- or it could move items around to maintain the rules
-			-- remember to change the transaction log stuff if implementing this
-		else
-			has_room = true
-			chest.empties[i] = true
-		end
+		-- TODO: handle non-empty chests
+		-- it can't just index it, because there are rules (specifically about only one partial per item type and chest)
+		-- maybe just return nil, saying we can't add this chest
+		-- or it could move items around to maintain the rules
+		-- remember to change the transaction log stuff if implementing this
+		assert(not contents[i])
+		chest.empties[i] = true
 	end
-	if has_room then
-		state.chest_room[chest] = true
-	end
+	state.num_slots = state.num_slots + chest.num_slots
+	state.num_slots_free = state.num_slots_free + chest.num_slots
+	state.chests[chest.name] = chest
+	state.chest_room[chest] = true
 	state.transaction_log.write(string.format('{ type = "add_chest"; name = %q; num_slots = %d; }\n', name, chest.num_slots))
 	state.transaction_log.flush()
 
