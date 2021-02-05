@@ -363,11 +363,11 @@ local function close()
 	release()
 end
 
--- must be locked externally
 local function identify(detail, add)
 	local itk = item_type_key(detail)
 	local item_type = state.item_types[itk]
 	if not item_type and add then
+		local release = not locked and acquire()
 		if not detail.displayName then
 			detail = add()
 		end
@@ -383,6 +383,7 @@ local function identify(detail, add)
 			itk, serialize(detail)
 		))
 		state.transaction_log.flush()
+		if release then release() end
 	end
 	return item_type
 end
@@ -458,6 +459,9 @@ local function insert(inv, slot, amt, detail)
 
 	-- move the entire stack
 	local remaining = amt or detail.count
+	if remaining > detail.count then
+		remaining = detail.count
+	end
 	while remaining > 0 do
 		-- find a place to put it
 		local dst_chest, dst_slot
@@ -476,7 +480,8 @@ local function insert(inv, slot, amt, detail)
 		end
 		-- TODO: in flight
 		local n = inv.pushItems(dst_chest.name, slot, remaining, dst_slot)
-		track_insert(dst_chest, dst_slot, item_type, n, n < remaining)
+		local full = n < remaining
+		track_insert(dst_chest, dst_slot, item_type, n, full)
 		state.transaction_log.write(string.format(
 			'{'
 				.. ' type = "insert";'
@@ -486,7 +491,7 @@ local function insert(inv, slot, amt, detail)
 				.. ' num = %d;'
 				.. ' full = %s;'
 			.. '}\n',
-			dst_chest.name, dst_slot, item_type.key, n, n < remaining
+			dst_chest.name, dst_slot, item_type.key, n, full
 		))
 		state.transaction_log.flush()
 		remaining = remaining - n
@@ -501,8 +506,7 @@ local function extract(item_type, inv, dst_slot, amt)
 	local transferred = 0
 	local remaining = amt or item_type.number
 	local function extract_part(chest, slot)
-		local chest_slots = item_type.chests[chest]
-		local slot_num = chest_slots[slot]
+		local slot_num = item_type.chests[chest][slot]
 		local pull = slot_num < remaining and slot_num or remaining
 		-- TODO: in flight
 		local n = inv.pullItems(chest.name, slot, pull, dst_slot)

@@ -297,7 +297,11 @@ return function(I, ext_chest)
 		keys_down.alt   = keys_down[keys.leftAlt  ] or keys_down[keys.rightAlt  ]
 		keys_down.mods = (keys_down.ctrl and 'c' or '') .. (keys_down.alt and 'a' or '') .. (keys_down.shift and 's' or '')
 
-		if evt[1] == 'key' and evt[2] == keys.s and keys_down.mods == 'c' then
+		-- I.log('ui evt: ' .. textutils.serialize {
+		-- 	evt = evt;
+		-- 	keys_down = keys_down;
+		-- })
+		if evt[1] == 'key' and evt[2] == keys.w and keys_down.mods == 'c' then
 			I.save()
 		elseif evt[1] == 'key' and evt[2] == keys.enter and list_model and not keys_down.shift then
 			if list_model == ext_list_model then
@@ -305,7 +309,7 @@ return function(I, ext_chest)
 				if not item then
 					-- skip
 				elseif keys_down.alt then
-					local n = I.extract(item.item_type, ext_handle, item.slot, keys_down.ctrl and (item.maxCount - item.count) or 1)
+					local n = I.extract(item.item_type, ext_handle, item.slot, keys_down.ctrl and (item.item_type.example.maxCount - item.count) or 1)
 					item.count = item.count + n
 					list_model_draw_item(list_model.selected_i)
 				else
@@ -336,7 +340,7 @@ return function(I, ext_chest)
 					local remaining = keys_down.ctrl and item_type.example.maxCount or 1
 					for slot = 1, ext_handle.num_slots do
 						local stack = list[slot]
-						if I.item_type_key(stack) == item_type.key then
+						if stack and I.item_type_key(stack) == item_type.key then
 							local n = I.insert(ext_handle, slot, remaining)
 							remaining = remaining - n
 							if remaining <= 0 then
