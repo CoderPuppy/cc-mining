@@ -1,5 +1,8 @@
-local I = dofile 'cc/mining/inventory.lua'
 xpcall(function()
+	local I = dofile 'cc/mining/inventory.lua'
+	if I.initialize('inv-state') > 16 then
+		I.save()
+	end
 	dofile 'cc/mining/inventory-ui.lua' (I, peripheral.wrap 'minecraft:chest_2')
 end, function(err)
 	if err == 'Terminated' then return end

@@ -278,10 +278,6 @@ return function(I, ext_chest)
 		end
 	end
 
-	if I.initialize() > 16 then
-		I.save()
-	end
-
 	ext_handle = ext_chest
 	-- TODO: this is a bit messy
 	ext_handle.num_slots = ext_handle.size()

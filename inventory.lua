@@ -152,24 +152,40 @@ local function acquire()
 	end
 end
 
-local function initialize()
+local function fs_paths(dir)
+	return {
+		save_new = fs.combine(dir, 'save-new');
+		save = fs.combine(dir, 'save');
+		transaction_log = fs.combine(dir, 'transaction-log');
+	}
+end
+
+local function initialize(dir)
+	assert(dir, 'no directory')
+
 	local release = acquire()
 
 	if state and state.transaction_log then
 		state.transaction_log.close()
 	end
 
-	-- TODO: filesystem layout
-	if fs.exists('inv-save-new') then
-		assert(not fs.isDir('inv-save-new'))
-		fs.delete('inv-save')
-		fs.move('inv-save-new', 'inv-save')
+	local paths = fs_paths(dir)
+	if not fs.isDir(dir) then
+		fs.makeDir(dir)
 	end
-	local h = fs.open('inv-save', 'r')
+
+	if fs.exists(paths.save_new) then
+		assert(not fs.isDir(paths.save_new))
+		fs.delete(paths.save)
+		fs.move(paths.save_new, paths.save)
+	end
+	local h = fs.open(paths.save, 'r')
 	if h then
 		local save = textutils.unserialize(h.readAll())
 		h.close()
 		state = {
+			dir = dir;
+			paths = paths;
 			save_id = save.id;
 			total_number = save.total_number;
 			num_slots = save.num_slots;
@@ -215,6 +231,8 @@ local function initialize()
 		end
 	else
 		state = {
+			dir = dir;
+			paths = paths;
 			save_id = -1;
 			total_number = 0;
 			num_slots = 0;
@@ -226,8 +244,7 @@ local function initialize()
 	end
 
 	local n = 0
-	-- TODO: filesystem layout
-	local h = fs.open('inv-transaction-log', 'r')
+	local h = fs.open(paths.transaction_log, 'r')
 	if h then
 		assert(tostring(state.save_id) == h.readLine(), 'transaction log for different save')
 		while true do
@@ -257,11 +274,9 @@ local function initialize()
 			n = n + 1
 		end
 		h.close()
-		-- TODO: filesystem layout
-		state.transaction_log = fs.open('inv-transaction-log', 'a')
+		state.transaction_log = fs.open(paths.transaction_log, 'a')
 	else
-		-- TODO: filesystem layout
-		state.transaction_log = fs.open('inv-transaction-log', 'w')
+		state.transaction_log = fs.open(paths.transaction_log, 'w')
 		state.transaction_log.write(string.format('%d\n', state.save_id))
 		state.transaction_log.flush()
 	end
@@ -316,16 +331,14 @@ local function save()
 		save.chest_room[chest.name] = true
 	end
 
-	-- TODO: filesystem layout
-	local h = fs.open('inv-save-new', 'w')
+	local h = fs.open(state.paths.save_new, 'w')
 	h.write(textutils.serialize(save))
 	h.close()
-	fs.delete('inv-save')
-	fs.move('inv-save-new', 'inv-save')
+	fs.delete(state.paths.save)
+	fs.move(state.paths.save_new, state.paths.save)
 	state.save_id = save.id
 
-	-- TODO: filesystem layout
-	state.transaction_log = fs.open('inv-transaction-log', 'w')
+	state.transaction_log = fs.open(state.paths.transaction_log, 'w')
 	state.transaction_log.write(string.format('%d\n', state.save_id))
 	state.transaction_log.flush()
 
@@ -333,14 +346,14 @@ local function save()
 end
 local function reset()
 	local release = acquire()
+	local paths = dir and fs_paths(dir) or state.paths
 	if state and state.transaction_log then
 		state.transaction_log.close()
 	end
 	state = nil
-	-- TODO: filesystem layout
-	fs.delete('inv-save')
-	fs.delete('inv-save-new')
-	fs.delete('inv-transaction-log')
+	fs.delete(paths.save)
+	fs.delete(paths.save_new)
+	fs.delete(paths.transaction_log)
 	release()
 end
 local function close()

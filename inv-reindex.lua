@@ -1,6 +1,6 @@
 local first_chest = ...
 local I = dofile 'cc/mining/inventory.lua'
-I.initialize()
+I.initialize('inv-state')
 -- I.add_chest(first_chest)
 peripheral.find('minecraft:barrel', function(name, handle)
 	if I.state().chests[name] then return end
