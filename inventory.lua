@@ -70,6 +70,22 @@ local function serialize(v)
 end
 
 -- TODO: one function which writes to the transaction log and performs the transaction
+local function track_add_chest(name, num_slots)
+	local chest = {
+		name = name;
+		num_slots = num_slots;
+		empties = {};
+		item_types = {};
+	}
+	state.chests[chest.name] = chest
+	state.chest_room[chest] = true
+	for slot = 1, chest.num_slots do
+		chest.empties[slot] = true
+	end
+	state.num_slots = state.num_slots + chest.num_slots
+	state.num_slots_free = state.num_slots_free + chest.num_slots
+	return chest
+end
 local function track_add_item_type(itk, detail)
 	-- there's no good reason for itk to be passed in
 	-- just because it was already computed in `insert`
@@ -220,21 +236,7 @@ local function initialize()
 			local entry = textutils.unserialize(line)
 			log('replay: ' .. textutils.serialize(entry))
 			if entry.type == 'add_chest' then
-				-- TODO: this is quite limited
-				-- see `add_chest` for more about this
-				local chest = {
-					name = entry.name;
-					num_slots = entry.num_slots;
-					empties = {};
-					item_types = {};
-				}
-				chests[chest.name] = chest
-				for i = 1, chest.num_slots do
-					chest.empties[i] = true
-				end
-				state.num_slots = state.num_slots + chest.num_slots
-				state.num_slots_free = state.num_slots_free + chest.num_slots
-				chest_room[chest] = true
+				track_add_chest(entry.name, entry.num_slots)
 			elseif entry.type == 'add_item_type' then
 				track_add_item_type(entry.item_type_key, entry.detail)
 			elseif entry.type == 'insert' then
@@ -375,29 +377,55 @@ end
 local function add_chest(name)
 	local release = acquire()
 
+	assert(not state.chests[name], 'chest already registered')
+
 	local inv = peripheral.wrap(name)
-	local chest = {
-		name = name;
-		num_slots = inv.size();
-		empties = {};
-		item_types = {};
-	}
-	assert(not state.chests[chest.name], 'chest already registered')
+	local num_slots = inv.size()
 	local contents = inv.list()
-	for i = 1, chest.num_slots do
-		-- TODO: handle non-empty chests
-		-- it can't just index it, because there are rules (specifically about only one partial per item type and chest)
-		-- maybe just return nil, saying we can't add this chest
-		-- or it could move items around to maintain the rules
-		-- remember to change the transaction log stuff if implementing this
-		assert(not contents[i])
-		chest.empties[i] = true
+	local slots = {}
+	local partials = {}
+	for slot = 1, num_slots do
+		local stack = contents[slot]
+		if stack then
+			local item_type = identify(stack, function()
+				return inv.getItemDetail(slot)
+			end)
+			local number = stack.count
+			local prev_slot = partials[item_type]
+			if prev_slot then
+				local n = inv.pushItems(name, slot, number, prev_slot)
+				number = number - n
+				slots[prev_slot][2] = slots[prev_slot][2] + n
+			end
+			if number > 0 then
+				slots[slot] = {item_type, number}
+				partials[item_type] = slot
+			end
+		end
 	end
-	state.num_slots = state.num_slots + chest.num_slots
-	state.num_slots_free = state.num_slots_free + chest.num_slots
-	state.chests[chest.name] = chest
-	state.chest_room[chest] = true
-	state.transaction_log.write(string.format('{ type = "add_chest"; name = %q; num_slots = %d; }\n', name, chest.num_slots))
+	local chest = track_add_chest(name, num_slots)
+	local trans_str = string.format('{ type = "add_chest"; name = %q; num_slots = %d; }\n', name, num_slots)
+	for slot = 1, num_slots do
+		local rec = slots[slot]
+		if rec then
+			local item_type, number = rec[1], rec[2]
+			local full = partials[item_type] ~= slot
+			track_insert(chest, slot, item_type, number)
+			trans_str = string.format(
+				'%s{'
+					.. ' type = "insert";'
+					.. ' chest_name = %q;'
+					.. ' slot = %d;'
+					.. ' item_type_key = %q;'
+					.. ' num = %d;'
+					.. ' full = %s;'
+				.. '}\n',
+				trans_str,
+				name, slot, item_type.key, number, full
+			)
+		end
+	end
+	state.transaction_log.write(trans_str)
 	state.transaction_log.flush()
 
 	release()
