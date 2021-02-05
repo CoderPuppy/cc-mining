@@ -1,0 +1,44 @@
+all turtles run at one y-level (probably about 32)
+many turtles may just wake up and broadcast asking for commands
+
+keep track of regions
+	with rectangular regions
+	no region ⇒ not allowed to roam (these turtles can't go there)
+	regions may be clear or wild
+		clear being entirely mined out, no obstacles
+		wild being whatever, might need to mine
+		refill in wild
+			one thing I'm not sure about is filling in paths in wild regions
+			so that after a turtle has gone through it has to refill
+			but that's complicated and annoying
+			not doing that makes wild vs clear not very useful (maybe still for inventory requirements)
+		inv requirements for wild
+			must have enough inventory space to mine in the wild
+			so the manhattan distance (possibly times something because different items don't stack)
+			also balancing pathing in the clear (free) vs pathing in the wild
+				I think it should be possible to optimize the graph to one edge per clear region
+	mark minable on regions?
+
+multi chunk
+	talk to a command computer in spawn chunks about chunkloading
+	TODO: how much does a single /forceload load?
+		3x3, only the first chunk ticks entities
+	each chunk needs an ender modem
+		or only a regular modem if there's a repeater with an ender modem (in spawn chunks)
+	adjacent chunks may have a way to transfer items
+		or may just have connected wired networks
+			TODO: how do wired networks work when partially loaded?
+				doesn't matter
+		TODO: does a full block wired modem connect networks?
+	TODO: pathing along these
+		some long distance paths might just take turtles
+	TODO: should each chunk be independent or should some be linked
+		relevant for ender modems
+
+storage
+	TODO: how does placing chests work now?
+
+turtle v turtle
+	what happens when two turtles collide?
+	they can wrap each other, get the IDs and start negotiating
+	if they are perpendicular then it will resolve itself
