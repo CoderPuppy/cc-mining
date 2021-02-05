@@ -48,8 +48,8 @@ local locked
 
 -- TODO: track numbers of slots and total number of items
 
-local function item_type_key(name, nbt)
-	return string.format('%q%q', name, nbt)
+local function item_type_key(stack)
+	return string.format('%q%q', stack.name, stack.nbt)
 end
 
 local function serialize(v)
@@ -352,7 +352,7 @@ end
 
 -- must be locked externally
 local function identify(detail, add)
-	local itk = item_type_key(detail.name, detail.nbt)
+	local itk = item_type_key(detail)
 	local item_type = state.item_types[itk]
 	if not item_type and add then
 		if not detail.displayName then
