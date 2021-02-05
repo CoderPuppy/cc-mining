@@ -241,14 +241,14 @@ local function initialize()
 				track_add_item_type(entry.item_type_key, entry.detail)
 			elseif entry.type == 'insert' then
 				track_insert(
-					chests[entry.chest_name], entry.slot,
-					item_types[entry.item_type_key],
+					state.chests[entry.chest_name], entry.slot,
+					state.item_types[entry.item_type_key],
 					entry.num, entry.full
 				)
 			elseif entry.type == 'extract' then
 				track_extract(
-					chests[entry.chest_name], entry.slot,
-					item_types[entry.item_type_key],
+					state.chests[entry.chest_name], entry.slot,
+					state.item_types[entry.item_type_key],
 					entry.num
 				)
 			else
