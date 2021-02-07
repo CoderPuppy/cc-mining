@@ -563,7 +563,7 @@ local function extract(item_type, inv, dst_slot, amt)
 		local h = fs.open(state.paths.in_flight, 'w')
 		h.write(string.format(
 			'{ item_type_key = %q; chest_name = %q; slot = %d; }',
-			item_type.key, dst_chest.name, dst_slot
+			item_type.key, chest.name, dst_slot
 		))
 		h.close()
 		local n = inv.pullItems(chest.name, slot, pull, dst_slot)
