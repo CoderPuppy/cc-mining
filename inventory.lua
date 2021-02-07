@@ -224,7 +224,6 @@ local function initialize(dir)
 				chest.item_types[state.item_types[itk]] = true
 			end
 		end
-		state.chest_room = {}
 		for name in pairs(save.chest_room) do
 			state.chest_room[state.chests[name]] = true
 		end
